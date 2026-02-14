@@ -5,6 +5,7 @@ from app.kb.service import KBService
 from app.providers.interfaces import LLMProvider
 from app.schemas import DecisionSpec, SimulateRequest, SimulationResult
 from app.sim.prompt_builder import PromptBuilder
+from app.sim.scoring import compute_stability_score
 
 
 class SimulationService:
@@ -20,6 +21,15 @@ class SimulationService:
         prompt = self._prompts.build(decision_text, retrieved, req.constraints, decision_spec=decision_spec)
         result = self._llm.simulate_decision(prompt, retrieved, req.constraints)
         result.branches = limit_branches(result.branches)
+        for branch in result.branches:
+            llm_score = branch.llm_stability_score if branch.llm_stability_score is not None else (branch.stability_score or 50.0)
+            computed = compute_stability_score(branch)
+            branch.llm_stability_score = llm_score
+            branch.computed_stability_score = computed
+            branch.final_stability_score = round((0.6 * computed) + (0.4 * llm_score), 2)
+            branch.stability_score = branch.final_stability_score
+            branch.risk_clusters = sorted(branch.risk_clusters, key=lambda r: r.severity_level, reverse=True)
+        result.audit.embedding_docs_used = len(retrieved)
         return result
 
     def extract_decision_spec(self, transcript: str) -> DecisionSpec:

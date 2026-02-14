@@ -1,12 +1,12 @@
 import json
 import logging
+import random
 import time
 from typing import Any
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
 from app.providers.interfaces import LLMProvider, LLMResponse
@@ -27,35 +27,49 @@ class NovaLiteClient(LLMProvider):
         self._model_id = settings.bedrock_model_id_nova_lite
         self._prompt_builder = PromptBuilder()
 
-    @retry(wait=wait_exponential(multiplier=1, min=1, max=8), stop=stop_after_attempt(3), reraise=True)
     def generate_json(self, prompt: str) -> LLMResponse:
-        start = time.perf_counter()
         payload = {
             "messages": [{"role": "user", "content": [{"text": prompt}]}],
             "inferenceConfig": {"maxTokens": 1800, "temperature": 0.2, "topP": 0.9},
         }
-        logger.info("bedrock_request", extra={"model_id": self._model_id, "prompt_chars": len(prompt)})
-        try:
-            resp = self._client.converse(modelId=self._model_id, **payload)
-            text, usage = self._extract_converse_payload(resp)
-        except (AttributeError, ClientError) as exc:
-            if isinstance(exc, ClientError):
-                code = exc.response.get("Error", {}).get("Code", "")
-                if code not in {"UnknownOperationException", "ValidationException"}:
-                    raise
-            resp = self._client.invoke_model(modelId=self._model_id, body=json.dumps(payload))
-            invoke_payload = json.loads(resp["body"].read())
-            text, usage = self._extract_invoke_payload(invoke_payload)
-        latency_ms = int((time.perf_counter() - start) * 1000)
-        json_text = self._extract_first_json(text) or "{}"
-        logger.info("bedrock_response", extra={"model_id": self._model_id, "latency_ms": latency_ms})
-        return LLMResponse(
-            content=json_text,
-            model_id=self._model_id,
-            latency_ms=latency_ms,
-            tokens_input=usage.get("inputTokens"),
-            tokens_output=usage.get("outputTokens"),
-        )
+        max_attempts = 3
+        retry_count = 0
+        last_exc: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            start = time.perf_counter()
+            logger.info("bedrock_request", extra={"model_id": self._model_id, "prompt_chars": len(prompt), "attempt": attempt})
+            try:
+                try:
+                    resp = self._client.converse(modelId=self._model_id, **payload)
+                    text, usage = self._extract_converse_payload(resp)
+                except (AttributeError, ClientError) as exc:
+                    if isinstance(exc, ClientError):
+                        code = exc.response.get("Error", {}).get("Code", "")
+                        if code not in {"UnknownOperationException", "ValidationException"}:
+                            raise
+                    resp = self._client.invoke_model(modelId=self._model_id, body=json.dumps(payload))
+                    invoke_payload = json.loads(resp["body"].read())
+                    text, usage = self._extract_invoke_payload(invoke_payload)
+                latency_ms = int((time.perf_counter() - start) * 1000)
+                json_text = self._extract_first_json(text) or "{}"
+                logger.info("bedrock_response", extra={"model_id": self._model_id, "latency_ms": latency_ms, "attempt": attempt})
+                return LLMResponse(
+                    content=json_text,
+                    model_id=self._model_id,
+                    latency_ms=latency_ms,
+                    tokens_input=usage.get("inputTokens"),
+                    tokens_output=usage.get("outputTokens"),
+                    retry_count=retry_count,
+                )
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= max_attempts:
+                    break
+                retry_count += 1
+                sleep_s = min(8.0, (2 ** (attempt - 1)) + random.uniform(0.0, 0.3))
+                time.sleep(sleep_s)
+        assert last_exc is not None
+        raise last_exc
 
     def simulate_decision(self, prompt: str, context: list[str], constraints: dict[str, Any]) -> SimulationResult:
         _ = context, constraints
@@ -71,6 +85,9 @@ class NovaLiteClient(LLMProvider):
                 latency_ms=primary.latency_ms + repaired.latency_ms,
                 tokens_input=(primary.tokens_input or 0) + (repaired.tokens_input or 0),
                 tokens_output=(primary.tokens_output or 0) + (repaired.tokens_output or 0),
+                retry_count=primary.retry_count + repaired.retry_count,
+                used_repair_pass=True,
+                used_mock=False,
             )
             return result
         result.audit = AuditMeta(
@@ -78,6 +95,9 @@ class NovaLiteClient(LLMProvider):
             latency_ms=primary.latency_ms,
             tokens_input=primary.tokens_input,
             tokens_output=primary.tokens_output,
+            retry_count=primary.retry_count,
+            used_repair_pass=False,
+            used_mock=False,
         )
         return result
 

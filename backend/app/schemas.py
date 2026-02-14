@@ -2,7 +2,19 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+SEVERITY_MAP: dict[str, tuple[str, int]] = {
+    "low": ("low", 1),
+    "minor": ("low", 1),
+    "medium": ("medium", 2),
+    "moderate": ("medium", 2),
+    "high": ("high", 3),
+    "severe": ("high", 3),
+    "critical": ("critical", 4),
+    "urgent": ("critical", 4),
+}
 
 
 class KPISet(BaseModel):
@@ -16,6 +28,21 @@ class KPISet(BaseModel):
 class RiskCluster(BaseModel):
     tag: str
     severity: Literal["low", "medium", "high", "critical"]
+    severity_level: int = Field(default=1, ge=1, le=4)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def normalize_severity(cls, value: str) -> str:
+        norm = (value or "").strip().lower()
+        if norm in SEVERITY_MAP:
+            return SEVERITY_MAP[norm][0]
+        return "medium"
+
+    @model_validator(mode="after")
+    def set_severity_level(self):
+        self.severity_level = SEVERITY_MAP[self.severity][1]
+        return self
 
 
 class StressPoint(BaseModel):
@@ -42,7 +69,23 @@ class Branch(BaseModel):
     stress_points: list[StressPoint]
     failure_triggers: list[FailureTrigger]
     mitigations: list[Mitigation]
-    stability_score: int = Field(ge=0, le=100)
+    llm_stability_score: float | None = Field(default=None, ge=0, le=100)
+    computed_stability_score: float | None = Field(default=None, ge=0, le=100)
+    final_stability_score: float | None = Field(default=None, ge=0, le=100)
+    stability_score: float | None = Field(default=None, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def map_deprecated_stability_score(self):
+        if self.llm_stability_score is None and self.stability_score is not None:
+            self.llm_stability_score = self.stability_score
+        if self.final_stability_score is None:
+            if self.computed_stability_score is not None and self.llm_stability_score is not None:
+                self.final_stability_score = round(0.6 * self.computed_stability_score + 0.4 * self.llm_stability_score, 2)
+            elif self.llm_stability_score is not None:
+                self.final_stability_score = self.llm_stability_score
+        # Keep backward-compatible field for existing clients.
+        self.stability_score = self.final_stability_score
+        return self
 
 
 class AuditMeta(BaseModel):
@@ -51,6 +94,10 @@ class AuditMeta(BaseModel):
     latency_ms: int = 0
     tokens_input: int | None = None
     tokens_output: int | None = None
+    retry_count: int = 0
+    used_repair_pass: bool = False
+    used_mock: bool = True
+    embedding_docs_used: int = 0
 
 
 class SimulationResult(BaseModel):
