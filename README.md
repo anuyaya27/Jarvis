@@ -2,7 +2,7 @@
 
 Voice-driven parallel-reality decision engine for high-stakes business strategy using Amazon Nova (Nova 2 Sonic + Nova 2 Lite + Nova Multimodal Embeddings + optional Nova Act).
 
-## Quickstart (no Docker)
+## Quickstart
 
 1. Create and activate venv, then install backend:
    - macOS/Linux:
