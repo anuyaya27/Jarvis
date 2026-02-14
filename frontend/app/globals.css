@@ -1,0 +1,67 @@
+:root {
+  --bg: #f3f5f7;
+  --card: #ffffff;
+  --fg: #13202b;
+  --accent: #0a6e4f;
+  --muted: #6b7780;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  background: linear-gradient(180deg, #eef4ef 0%, #f9fbff 100%);
+  color: var(--fg);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.shell {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(4, 22, 18, 0.08);
+}
+
+button {
+  background: var(--accent);
+  color: white;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+input, textarea {
+  width: 100%;
+  border: 1px solid #ccd5dd;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f4f8fb;
+  border-radius: 8px;
+  padding: 12px;
+}
+
