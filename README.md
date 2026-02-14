@@ -106,6 +106,24 @@ curl -s -X POST http://localhost:8000/simulate \
 - If OFF, Sonic UI is intentionally disabled with a status message.
 - Backend Sonic websocket endpoints are still present for future integration.
 
+## Demo Script (90 seconds)
+
+1. Open `http://localhost:3000/voice` and keep `Use Browser Mic (Web Speech)` ON.
+2. Say this exact prompt:
+   - `Simulate acquiring Competitor X under recession next quarter.`
+3. Click `Run Simulation`.
+4. Point out on screen:
+   - `Executive Summary` card (concise board-ready narrative).
+   - Branch grid showing `Final Stability` progress bars.
+   - Risk chips normalized to consistent severities (`low/medium/high/critical`).
+   - `Recommended Path` reasoning for the top branch.
+5. Toggle `Show JSON` and highlight audit transparency fields:
+   - `retry_count`
+   - `used_repair_pass`
+   - `used_mock`
+   - `embedding_docs_used`
+6. Optionally open `http://localhost:3000/kb`, upload one text/PDF file, rerun simulation, and show `embedding_docs_used` increases.
+
 ## Testing
 
 - `cd backend && pytest -q`
