@@ -3,6 +3,7 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
+from app.core.errors import AppError
 from app.core.config import get_settings
 from app.kb.chunker import chunk_text
 from app.kb.store import KBStore
@@ -20,11 +21,25 @@ class KBService:
     def upload_document(self, filename: str, data: bytes) -> tuple[str, int]:
         text = self._extract_text(filename, data)
         chunks = chunk_text(text, chunk_size=self._chunk_size, overlap=self._chunk_overlap)
-        embeddings = self._embedder.embed_texts(chunks) if chunks else []
+        try:
+            embeddings = self._embedder.embed_texts(chunks) if chunks else []
+        except Exception as exc:
+            raise AppError(
+                code="embedding_unavailable",
+                message="Embedding provider unavailable. Check Bedrock access/model settings.",
+                status_code=503,
+            ) from exc
         return self._store.add_chunks(source=filename, chunks=chunks, embeddings=embeddings)
 
     def query(self, query: str, top_k: int) -> list[dict]:
-        q = self._embedder.embed_query(query)
+        try:
+            q = self._embedder.embed_query(query)
+        except Exception as exc:
+            raise AppError(
+                code="embedding_unavailable",
+                message="Embedding provider unavailable. Check Bedrock access/model settings.",
+                status_code=503,
+            ) from exc
         return self._store.search(q, top_k)
 
     def context_for_docs(self, doc_ids: list[str]) -> list[str]:

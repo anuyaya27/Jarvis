@@ -1,12 +1,17 @@
 PY=python
 
-.PHONY: backend-install backend-dev backend-test frontend-install frontend-dev dev docker-up
+.PHONY: setup backend-install backend-dev backend-test frontend-install frontend-dev dev
+
+setup:
+	$(PY) -m venv .venv
+	. .venv/bin/activate && pip install -e backend[dev]
+	cd frontend && npm install
 
 backend-install:
-	cd backend && $(PY) -m pip install -e .[dev]
+	$(PY) -m pip install -e backend[dev]
 
 backend-dev:
-	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	uvicorn app.main:app --reload --app-dir backend --host 0.0.0.0 --port 8000
 
 backend-test:
 	cd backend && pytest -q
@@ -18,10 +23,7 @@ frontend-dev:
 	cd frontend && npm run dev
 
 dev:
-	@echo "Run backend and frontend in separate terminals:"
-	@echo "make backend-dev"
-	@echo "make frontend-dev"
-
-docker-up:
-	cd infra && docker compose up --build
-
+	@echo "Run backend:"
+	@echo ". .venv/bin/activate && uvicorn app.main:app --reload --app-dir backend --host 0.0.0.0 --port 8000"
+	@echo "Run frontend in another terminal:"
+	@echo "cd frontend && npm run dev"

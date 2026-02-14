@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     environment: str = "dev"
     use_mock_providers: bool = True
     log_level: str = "INFO"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     aws_region: str = "us-east-1"
     aws_profile: str | None = None
@@ -37,4 +38,3 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.ensure_dirs()
     return settings
-

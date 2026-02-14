@@ -1,11 +1,19 @@
 import json
 from typing import Any
 
+from app.schemas import DecisionSpec
 
 class PromptBuilder:
-    def build(self, decision_text: str, retrieved_context: list[str], constraints: dict[str, Any]) -> str:
+    def build(
+        self,
+        decision_text: str,
+        retrieved_context: list[str],
+        constraints: dict[str, Any],
+        decision_spec: DecisionSpec | None = None,
+    ) -> str:
         context_block = "\n".join(f"- {c}" for c in retrieved_context) if retrieved_context else "- none"
         constraints_json = json.dumps(constraints, sort_keys=True)
+        spec_json = decision_spec.model_dump_json() if decision_spec else "{}"
         return (
             "You are Multiverse Copilot, a high-stakes business strategy simulator.\n"
             "Return JSON only. Do not include markdown.\n"
@@ -14,9 +22,18 @@ class PromptBuilder:
             "Each branch must include: branch_name,narrative,key_events,KPIs,risk_clusters,stress_points,failure_triggers,mitigations,stability_score.\n"
             "Limit branches to max 6.\n"
             f"Decision text: {decision_text}\n"
+            f"Decision spec JSON: {spec_json}\n"
             f"Retrieved context:\n{context_block}\n"
             f"Constraints: {constraints_json}\n"
             "Produce realistic KPI values and clear mitigations ranked by impact."
+        )
+
+    def build_decision_spec(self, transcript: str) -> str:
+        return (
+            "Extract a strict JSON object with keys:\n"
+            "decision_title, objective, options, constraints, time_horizon, market_context, key_assumptions.\n"
+            "Return JSON only and keep arrays concise.\n"
+            f"Input text: {transcript}"
         )
 
     def build_repair(self, broken_json: str, validation_error: str) -> str:
@@ -25,4 +42,3 @@ class PromptBuilder:
             f"Validation error: {validation_error}\n"
             f"Broken JSON:\n{broken_json}"
         )
-

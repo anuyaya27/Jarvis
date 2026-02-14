@@ -66,6 +66,17 @@ class MockLLMProvider(LLMProvider):
         )
 
     def generate_json(self, prompt: str) -> LLMResponse:
+        if "decision_title" in prompt and "time_horizon" in prompt:
+            payload = {
+                "decision_title": "Acquire Competitor X",
+                "objective": "Evaluate acquisition under recession conditions",
+                "options": ["acquire", "strategic partnership", "defer"],
+                "constraints": ["cash runway", "regulatory complexity"],
+                "time_horizon": "next quarter",
+                "market_context": "recessionary demand pressure",
+                "key_assumptions": ["financing available", "integration team capacity"],
+            }
+            return LLMResponse(content=json.dumps(payload), model_id="mock.nova-lite", latency_ms=10, tokens_input=40, tokens_output=30)
         # Deterministic payload based on prompt hash for testability.
         h = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
         payload = {"prompt_hash": h, "status": "ok"}
@@ -110,4 +121,3 @@ class MockNovaActProvider(AgentAutomationProvider):
             "summary": "Nova Act stub executed. TODO: wire real browser workflow automation.",
             "input": payload,
         }
-

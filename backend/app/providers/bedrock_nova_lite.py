@@ -5,6 +5,7 @@ from typing import Any
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
@@ -29,19 +30,27 @@ class NovaLiteClient(LLMProvider):
     @retry(wait=wait_exponential(multiplier=1, min=1, max=8), stop=stop_after_attempt(3), reraise=True)
     def generate_json(self, prompt: str) -> LLMResponse:
         start = time.perf_counter()
-        body = {
+        payload = {
             "messages": [{"role": "user", "content": [{"text": prompt}]}],
             "inferenceConfig": {"maxTokens": 1800, "temperature": 0.2, "topP": 0.9},
         }
-        logger.info("bedrock_request", extra={"model_id": self._model_id, "body_keys": list(body.keys())})
-        resp = self._client.converse(modelId=self._model_id, **body)
+        logger.info("bedrock_request", extra={"model_id": self._model_id, "prompt_chars": len(prompt)})
+        try:
+            resp = self._client.converse(modelId=self._model_id, **payload)
+            text, usage = self._extract_converse_payload(resp)
+        except (AttributeError, ClientError) as exc:
+            if isinstance(exc, ClientError):
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code not in {"UnknownOperationException", "ValidationException"}:
+                    raise
+            resp = self._client.invoke_model(modelId=self._model_id, body=json.dumps(payload))
+            invoke_payload = json.loads(resp["body"].read())
+            text, usage = self._extract_invoke_payload(invoke_payload)
         latency_ms = int((time.perf_counter() - start) * 1000)
-        output_message = resp.get("output", {}).get("message", {}).get("content", [])
-        text = next((item.get("text", "") for item in output_message if "text" in item), "{}")
-        usage = resp.get("usage", {})
+        json_text = self._extract_first_json(text) or "{}"
         logger.info("bedrock_response", extra={"model_id": self._model_id, "latency_ms": latency_ms})
         return LLMResponse(
-            content=text,
+            content=json_text,
             model_id=self._model_id,
             latency_ms=latency_ms,
             tokens_input=usage.get("inputTokens"),
@@ -72,3 +81,34 @@ class NovaLiteClient(LLMProvider):
         )
         return result
 
+    @staticmethod
+    def _extract_converse_payload(resp: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        output_message = resp.get("output", {}).get("message", {}).get("content", [])
+        text = next((item.get("text", "") for item in output_message if "text" in item), "{}")
+        usage = resp.get("usage", {})
+        return text, usage
+
+    @staticmethod
+    def _extract_invoke_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        if "output" in payload and "message" in payload.get("output", {}):
+            output_message = payload.get("output", {}).get("message", {}).get("content", [])
+            text = next((item.get("text", "") for item in output_message if "text" in item), "{}")
+        elif "content" in payload and isinstance(payload["content"], list):
+            text = "".join(part.get("text", "") for part in payload["content"] if isinstance(part, dict))
+        else:
+            text = payload.get("generation", payload.get("outputText", "{}"))
+        usage = payload.get("usage", {})
+        return text, usage
+
+    @staticmethod
+    def _extract_first_json(text: str) -> str | None:
+        decoder = json.JSONDecoder()
+        for idx, ch in enumerate(text):
+            if ch != "{":
+                continue
+            try:
+                obj, _ = decoder.raw_decode(text[idx:])
+                return json.dumps(obj)
+            except Exception:
+                continue
+        return None

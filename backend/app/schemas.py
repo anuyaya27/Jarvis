@@ -81,6 +81,27 @@ class SimulateRequest(BaseModel):
         return self
 
 
+class DecisionSpec(BaseModel):
+    decision_title: str
+    objective: str
+    options: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    time_horizon: str
+    market_context: str
+    key_assumptions: list[str] = Field(default_factory=list)
+
+
+class DecisionSpecRequest(BaseModel):
+    decision_text: str | None = None
+    transcript: str | None = None
+
+    @model_validator(mode="after")
+    def require_source_text(self):
+        if not self.decision_text and not self.transcript:
+            raise ValueError("decision_text or transcript is required")
+        return self
+
+
 class KBQueryRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=20)

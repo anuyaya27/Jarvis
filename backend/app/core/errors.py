@@ -27,3 +27,9 @@ def register_error_handlers(app: FastAPI) -> None:
             content={"error": {"code": "validation_error", "message": str(exc)}},
         )
 
+    @app.exception_handler(Exception)
+    async def generic_error_handler(_: Request, exc: Exception):
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": "internal_error", "message": "Unexpected server error."}},
+        )
