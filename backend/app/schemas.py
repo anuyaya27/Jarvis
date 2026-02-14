@@ -100,11 +100,27 @@ class AuditMeta(BaseModel):
     embedding_docs_used: int = 0
 
 
+class TopRisk(BaseModel):
+    branch_name: str
+    tag: str
+    severity: Literal["low", "medium", "high", "critical"]
+    severity_level: int = Field(ge=1, le=4)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class RecommendedPath(BaseModel):
+    branch_name: str
+    reasoning: str
+
+
 class SimulationResult(BaseModel):
     decision_id: str = Field(default_factory=lambda: str(uuid4()))
     input_summary: str
     assumptions: list[str]
     branches: list[Branch] = Field(max_length=6)
+    executive_summary: str = ""
+    top_3_risks: list[TopRisk] = Field(default_factory=list)
+    recommended_path: RecommendedPath | None = None
     overall_recommendation: str
     audit: AuditMeta
 

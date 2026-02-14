@@ -13,6 +13,7 @@ from app.providers.interfaces import (
     SpeechProvider,
 )
 from app.schemas import AuditMeta, Branch, FailureTrigger, KPISet, Mitigation, RiskCluster, SimulationResult, StressPoint
+from app.schemas import RecommendedPath, TopRisk
 
 
 class MockLLMProvider(LLMProvider):
@@ -64,6 +65,17 @@ class MockLLMProvider(LLMProvider):
                     stability_score=38,
                 ),
             ],
+            executive_summary="Acquisition can proceed only with staged close terms, liquidity safeguards, and retention controls.",
+            top_3_risks=[
+                TopRisk(branch_name="pessimistic", tag="liquidity", severity="critical", severity_level=4, confidence=0.78),
+                TopRisk(branch_name="base", tag="financing", severity="high", severity_level=3, confidence=0.7),
+                TopRisk(branch_name="optimistic", tag="integration", severity="medium", severity_level=2, confidence=0.62),
+            ],
+            recommended_path=RecommendedPath(
+                branch_name="optimistic",
+                reasoning="Use staged-close terms and pre-funded runway protections. Focus early on integration retention and KPI gates. "
+                "This path has the best stability-risk profile under current assumptions.",
+            ),
             overall_recommendation="Proceed only with staged close terms and pre-funded liquidity buffer.",
             audit=AuditMeta(
                 model_id="mock.nova-lite",
