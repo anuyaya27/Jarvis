@@ -1,8 +1,6 @@
 from io import BytesIO
 from pathlib import Path
 
-from pypdf import PdfReader
-
 from app.core.errors import AppError
 from app.core.config import get_settings
 from app.kb.chunker import chunk_text
@@ -49,6 +47,8 @@ class KBService:
     def _extract_text(filename: str, data: bytes) -> str:
         suffix = Path(filename).suffix.lower()
         if suffix == ".pdf":
+            from pypdf import PdfReader
+
             reader = PdfReader(BytesIO(data))
             return "\n".join(page.extract_text() or "" for page in reader.pages)
         return data.decode("utf-8", errors="ignore")

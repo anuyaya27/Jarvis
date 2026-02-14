@@ -4,8 +4,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-import faiss
 import numpy as np
+
+try:
+    import faiss  # type: ignore
+except Exception:  # pragma: no cover
+    faiss = None
 
 
 class KBStore:
@@ -32,8 +36,8 @@ class KBStore:
         conn.commit()
         conn.close()
 
-    def _load_or_create_index(self) -> tuple[faiss.IndexFlatIP | None, list[str]]:
-        if Path(self._index_path).exists() and Path(f"{self._index_path}.ids").exists():
+    def _load_or_create_index(self) -> tuple[Any | None, list[str]]:
+        if faiss and Path(self._index_path).exists() and Path(f"{self._index_path}.ids").exists():
             index = faiss.read_index(self._index_path)
             ids = json.loads(Path(f"{self._index_path}.ids").read_text(encoding="utf-8"))
             return index, ids
@@ -46,20 +50,27 @@ class KBStore:
             chunk_id = str(uuid.uuid4())
             conn.execute(
                 "INSERT INTO chunks (chunk_id, doc_id, source, text, metadata) VALUES (?, ?, ?, ?, ?)",
-                (chunk_id, doc_id, source, text, json.dumps({"dim": len(emb)})),
+                (chunk_id, doc_id, source, text, json.dumps({"dim": len(emb), "embedding": emb})),
             )
             self._id_map.append(chunk_id)
             vec = np.array([emb], dtype=np.float32)
-            if self._index is None:
-                self._index = faiss.IndexFlatIP(vec.shape[1])
-            faiss.normalize_L2(vec)
-            self._index.add(vec)
+            if faiss:
+                if self._index is None:
+                    self._index = faiss.IndexFlatIP(vec.shape[1])
+                faiss.normalize_L2(vec)
+                self._index.add(vec)
         conn.commit()
         conn.close()
-        self._persist_index()
+        if faiss:
+            self._persist_index()
         return doc_id, len(chunks)
 
     def search(self, query_vec: list[float], top_k: int) -> list[dict[str, Any]]:
+        if faiss:
+            return self._search_with_faiss(query_vec, top_k)
+        return self._search_with_numpy(query_vec, top_k)
+
+    def _search_with_faiss(self, query_vec: list[float], top_k: int) -> list[dict[str, Any]]:
         if self._index is None or self._index.ntotal == 0:
             return []
         q = np.array([query_vec], dtype=np.float32)
@@ -78,6 +89,25 @@ class KBStore:
         conn.close()
         return matches
 
+    def _search_with_numpy(self, query_vec: list[float], top_k: int) -> list[dict[str, Any]]:
+        conn = sqlite3.connect(self._db_path)
+        rows = conn.execute("SELECT source, text, metadata FROM chunks").fetchall()
+        conn.close()
+        if not rows:
+            return []
+        q = np.array(query_vec, dtype=np.float32)
+        q_norm = np.linalg.norm(q) or 1.0
+        scored = []
+        for source, text, metadata in rows:
+            try:
+                emb = np.array(json.loads(metadata).get("embedding", []), dtype=np.float32)
+                score = float(np.dot(q, emb) / (q_norm * (np.linalg.norm(emb) or 1.0)))
+            except Exception:
+                score = 0.0
+            scored.append({"source": source, "text": text, "score": score})
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        return scored[:top_k]
+
     def fetch_context_by_doc_ids(self, doc_ids: list[str], limit: int = 8) -> list[str]:
         if not doc_ids:
             return []
@@ -91,8 +121,7 @@ class KBStore:
         return [r[0] for r in rows]
 
     def _persist_index(self) -> None:
-        if self._index is None:
+        if not faiss or self._index is None:
             return
         faiss.write_index(self._index, self._index_path)
         Path(f"{self._index_path}.ids").write_text(json.dumps(self._id_map), encoding="utf-8")
-
