@@ -8,7 +8,8 @@ export default function VoicePage() {
   const [useBrowserMic, setUseBrowserMic] = useState(true);
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [result, setResult] = useState("");
+  const [result, setResult] = useState<any | null>(null);
+  const [showJson, setShowJson] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const recognitionRef = useRef<any>(null);
@@ -58,6 +59,7 @@ export default function VoicePage() {
 
   async function runSimulation() {
     setRunning(true);
+    setError("");
     const resp = await fetch(`${backend}/simulate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -66,9 +68,20 @@ export default function VoicePage() {
         constraints: { scenario_horizon: "next_quarter", branch_count_hint: 5 }
       })
     });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      setError(err?.error?.message || "Failed to run simulation.");
+      setRunning(false);
+      return;
+    }
     const data = await resp.json();
-    setResult(JSON.stringify(data, null, 2) || "");
+    setResult(data || null);
     setRunning(false);
+  }
+
+  function scorePercent(value: number | undefined | null): number {
+    const n = Number(value ?? 0);
+    return Math.max(0, Math.min(100, n));
   }
 
   return (
@@ -105,8 +118,70 @@ export default function VoicePage() {
         </div>
       </div>
       <div className="card" style={{ flex: 1, minWidth: 300 }}>
-        <h2>Simulation JSON</h2>
-        <pre>{result || "No result yet."}</pre>
+        <h2>Simulation Dashboard</h2>
+        {!result && <p>No result yet.</p>}
+        {result && (
+          <>
+            <h3>Executive Summary</h3>
+            <p>{result.executive_summary || "No executive summary returned."}</p>
+
+            <h3>Recommended Path</h3>
+            <p>
+              <b>{result.recommended_path?.branch_name || "N/A"}:</b>{" "}
+              {result.recommended_path?.reasoning || result.overall_recommendation}
+            </p>
+
+            <h3>Branches</h3>
+            <div className="row">
+              {(result.branches || []).map((branch: any) => (
+                <div key={branch.branch_name} className="card" style={{ minWidth: 220, flex: 1 }}>
+                  <div><b>{branch.branch_name}</b></div>
+                  <div style={{ margin: "8px 0" }}>
+                    Final Stability: {branch.final_stability_score ?? branch.stability_score ?? 0}
+                  </div>
+                  <div style={{ background: "#e5edf3", borderRadius: 8, height: 10, overflow: "hidden" }}>
+                    <div
+                      style={{
+                        width: `${scorePercent(branch.final_stability_score ?? branch.stability_score)}%`,
+                        background: "#0a6e4f",
+                        height: "100%"
+                      }}
+                    />
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    {(branch.risk_clusters || []).slice(0, 3).map((risk: any, i: number) => (
+                      <span
+                        key={`${risk.tag}-${i}`}
+                        style={{
+                          display: "inline-block",
+                          marginRight: 6,
+                          marginBottom: 6,
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: "#eef4ef",
+                          fontSize: 12
+                        }}
+                      >
+                        {risk.tag}:{risk.severity}
+                      </span>
+                    ))}
+                  </div>
+                  <ul>
+                    {(branch.key_events || []).slice(0, 2).map((event: string, i: number) => (
+                      <li key={i}>{event}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <label>
+                <input type="checkbox" checked={showJson} onChange={(e) => setShowJson(e.target.checked)} /> Show JSON
+              </label>
+            </div>
+            {showJson && <pre>{JSON.stringify(result, null, 2)}</pre>}
+          </>
+        )}
       </div>
     </div>
   );
