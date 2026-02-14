@@ -13,6 +13,7 @@ from app.providers.interfaces import (
     SpeechProvider,
 )
 from app.schemas import AuditMeta, Branch, FailureTrigger, KPISet, Mitigation, RiskCluster, SimulationResult, StressPoint
+from app.schemas import RecommendedPath, TopRisk
 
 
 class MockLLMProvider(LLMProvider):
@@ -36,6 +37,7 @@ class MockLLMProvider(LLMProvider):
                     stress_points=[StressPoint(resource="cash", threshold="burn > 12m/month")],
                     failure_triggers=[FailureTrigger(condition="Retention < 85%", impact="synergy delay 2 quarters")],
                     mitigations=[Mitigation(rank=1, action="Retention bonuses for top 10% talent")],
+                    llm_stability_score=82,
                     stability_score=82,
                 ),
                 Branch(
@@ -47,6 +49,7 @@ class MockLLMProvider(LLMProvider):
                     stress_points=[StressPoint(resource="debt covenant", threshold="net leverage > 3.5x")],
                     failure_triggers=[FailureTrigger(condition="Revenue miss > 10%", impact="refinancing risk")],
                     mitigations=[Mitigation(rank=1, action="Stage payments tied to post-close KPI gates")],
+                    llm_stability_score=63,
                     stability_score=63,
                 ),
                 Branch(
@@ -58,11 +61,31 @@ class MockLLMProvider(LLMProvider):
                     stress_points=[StressPoint(resource="cash runway", threshold="< 8 months")],
                     failure_triggers=[FailureTrigger(condition="Runway < 6 months", impact="forced divestiture")],
                     mitigations=[Mitigation(rank=1, action="Pre-negotiate bridge facility before close")],
+                    llm_stability_score=38,
                     stability_score=38,
                 ),
             ],
+            executive_summary="Acquisition can proceed only with staged close terms, liquidity safeguards, and retention controls.",
+            top_3_risks=[
+                TopRisk(branch_name="pessimistic", tag="liquidity", severity="critical", severity_level=4, confidence=0.78),
+                TopRisk(branch_name="base", tag="financing", severity="high", severity_level=3, confidence=0.7),
+                TopRisk(branch_name="optimistic", tag="integration", severity="medium", severity_level=2, confidence=0.62),
+            ],
+            recommended_path=RecommendedPath(
+                branch_name="optimistic",
+                reasoning="Use staged-close terms and pre-funded runway protections. Focus early on integration retention and KPI gates. "
+                "This path has the best stability-risk profile under current assumptions.",
+            ),
             overall_recommendation="Proceed only with staged close terms and pre-funded liquidity buffer.",
-            audit=AuditMeta(model_id="mock.nova-lite", latency_ms=24, tokens_input=600, tokens_output=420),
+            audit=AuditMeta(
+                model_id="mock.nova-lite",
+                latency_ms=24,
+                tokens_input=600,
+                tokens_output=420,
+                retry_count=0,
+                used_repair_pass=False,
+                used_mock=True,
+            ),
         )
 
     def generate_json(self, prompt: str) -> LLMResponse:
@@ -76,11 +99,25 @@ class MockLLMProvider(LLMProvider):
                 "market_context": "recessionary demand pressure",
                 "key_assumptions": ["financing available", "integration team capacity"],
             }
-            return LLMResponse(content=json.dumps(payload), model_id="mock.nova-lite", latency_ms=10, tokens_input=40, tokens_output=30)
+            return LLMResponse(
+                content=json.dumps(payload),
+                model_id="mock.nova-lite",
+                latency_ms=10,
+                tokens_input=40,
+                tokens_output=30,
+                retry_count=0,
+            )
         # Deterministic payload based on prompt hash for testability.
         h = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
         payload = {"prompt_hash": h, "status": "ok"}
-        return LLMResponse(content=json.dumps(payload), model_id="mock.nova-lite", latency_ms=10, tokens_input=10, tokens_output=8)
+        return LLMResponse(
+            content=json.dumps(payload),
+            model_id="mock.nova-lite",
+            latency_ms=10,
+            tokens_input=10,
+            tokens_output=8,
+            retry_count=0,
+        )
 
 
 class MockSpeechProvider(SpeechProvider):

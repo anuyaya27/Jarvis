@@ -12,6 +12,7 @@ class LLMResponse:
     latency_ms: int
     tokens_input: int | None = None
     tokens_output: int | None = None
+    retry_count: int = 0
 
 
 class LLMProvider(ABC):
@@ -48,4 +49,3 @@ class AgentAutomationProvider(ABC):
     @abstractmethod
     def run_playbook(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError
-
