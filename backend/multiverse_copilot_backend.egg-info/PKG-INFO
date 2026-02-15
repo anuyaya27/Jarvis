@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: multiverse-copilot-backend
+Version: 0.1.0
+Summary: Backend for Multiverse Copilot
+Requires-Python: >=3.11
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: pydantic>=2.8.0
+Requires-Dist: pydantic-settings>=2.4.0
+Requires-Dist: boto3>=1.35.0
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: pypdf>=4.3.0
+Requires-Dist: numpy>=1.26.0
+Requires-Dist: faiss-cpu>=1.8.0
+Requires-Dist: tenacity>=8.5.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.0; extra == "dev"
